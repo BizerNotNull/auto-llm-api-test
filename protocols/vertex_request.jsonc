@@ -1,0 +1,49 @@
+{
+  // Vertex AI (Gemini) 请求体配置
+  // true = 需要测试, false = 不需要测试
+  // 标注 [必须] 的为必须项
+
+  // ===== 必须项 =====
+  "model": true,                    // [必须] 模型名称 (URL 路径参数)
+  "contents": true,                 // [必须] 消息内容 (多轮对话)
+
+  // ===== 流式控制 =====
+  "stream": true,                   // 是否流式返回 (streamGenerateContent vs generateContent)
+
+  // ===== 系统指令 =====
+  "systemInstruction": true,        // 系统指令 (Content 格式, parts)
+
+  // ===== 生成配置 (generationConfig 整体) =====
+  "generationConfig": true,         // generationConfig 对象整体
+
+  // ===== 采样参数 (generationConfig 内) =====
+  "temperature": true,              // 温度 (0~2)
+  "topP": true,                     // Top-P 核采样 (0~1)
+  "topK": true,                     // Top-K 采样
+  "presencePenalty": true,          // 存在惩罚
+  "frequencyPenalty": true,         // 频率惩罚
+  "seed": true,                     // 随机种子
+
+  // ===== 输出控制 (generationConfig 内) =====
+  "maxOutputTokens": true,          // 最大输出token数
+  "stopSequences": true,            // 停止序列 (字符串数组, 最多5个)
+  "candidateCount": false,          // 候选响应数量 (目前仅支持1)
+  "responseMimeType": true,         // 响应MIME类型 (text/plain, application/json)
+  "responseSchema": true,           // JSON Schema 约束输出 (需responseMimeType=application/json)
+  "responseLogprobs": false,        // 是否返回对数概率
+  "logprobs": false,                // 返回 top N 对数概率
+
+  // ===== 工具调用 =====
+  "tools": true,                    // 工具声明 (functionDeclarations)
+  "toolConfig": true,               // 工具配置 (functionCallingConfig: mode)
+
+  // ===== 多模态 =====
+  "contents_image_base64": true,    // contents 中通过 inlineData 传图片
+  "contents_image_url": true,       // contents 中通过 fileData / URL 传图片
+
+  // ===== 安全设置 =====
+  "safetySettings": false,          // 安全过滤设置 (category + threshold)
+
+  // ===== 缓存 =====
+  "cachedContent": false            // 引用缓存内容 (cachedContents 资源名)
+}

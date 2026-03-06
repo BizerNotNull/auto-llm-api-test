@@ -1,0 +1,57 @@
+{
+  // OpenAI Chat Completions 请求体配置
+  // true = 需要测试, false = 不需要测试
+  // 标注 [必须] 的为必须项
+
+  // ===== 必须项 =====
+  "model": true,                    // [必须] 模型名称
+  "messages": true,                 // [必须] 消息列表
+
+  // ===== 流式控制 =====
+  "stream": true,                   // 是否流式返回
+  "stream_options": true,           // 流式选项 (include_usage)
+
+  // ===== 采样参数 =====
+  "temperature": true,              // 温度 (0~2)
+  "top_p": true,                    // Top-P 核采样 (0~1)
+  "frequency_penalty": true,        // 频率惩罚 (-2~2)
+  "presence_penalty": true,         // 存在惩罚 (-2~2)
+  "seed": true,                     // 随机种子 (可复现)
+  "logprobs": false,                // 是否返回对数概率
+  "top_logprobs": false,            // 返回 top N 对数概率 (0~20, 需logprobs=true)
+
+  // ===== 输出控制 =====
+  "max_tokens": true,               // 最大生成token数 (旧版)
+  "max_completion_tokens": true,    // 最大补全token数 (新版, 含推理token)
+  "stop": true,                     // 停止序列 (string 或 array, 最多4个)
+  "n": false,                       // 生成多少个选项 (默认1)
+  "response_format": true,          // 响应格式 (text/json_object/json_schema)
+
+  // ===== 工具调用 =====
+  "tools": true,                    // 工具/函数定义列表
+  "tool_choice": true,              // 工具选择策略 (none/auto/required/指定函数)
+  "parallel_tool_calls": true,      // 是否允许并行工具调用 (默认true)
+
+  // ===== 多模态 =====
+  "messages_image_url": true,       // messages 中通过 URL 传图片
+  "messages_image_base64": true,    // messages 中通过 base64 传图片
+  "modalities": false,              // 输出模态 (["text"], ["text","audio"])
+  "audio": false,                   // 音频输出配置 (voice, format)
+
+  // ===== 推理模型 (o系列) =====
+  "reasoning_effort": false,        // 推理力度 (low/medium/high, o系列模型)
+
+  // ===== 预测输出 =====
+  "prediction": false,              // 预测输出 (predicted_generation)
+
+  // ===== 网络搜索 =====
+  "web_search_options": false,      // 网络搜索选项
+
+  // ===== 元数据 =====
+  "user": false,                    // 用户标识 (追踪/限流)
+  "store": false,                   // 是否存储到 OpenAI (用于蒸馏/评估)
+  "metadata": false,                // 元数据键值对
+
+  // ===== 服务层级 =====
+  "service_tier": false             // 服务层级 (auto/default/flex)
+}

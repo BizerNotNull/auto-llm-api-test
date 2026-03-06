@@ -1,0 +1,47 @@
+{
+  // Anthropic Messages 请求体配置
+  // true = 需要测试, false = 不需要测试
+  // 标注 [必须] 的为必须项
+
+  // ===== 必须项 =====
+  "model": true,                    // [必须] 模型名称
+  "messages": true,                 // [必须] 消息列表
+  "max_tokens": true,               // [必须] 最大生成token数
+
+  // ===== 流式控制 =====
+  "stream": true,                   // 是否流式返回
+
+  // ===== 系统提示 =====
+  "system": true,                   // 系统提示词 (string 或 content block array)
+
+  // ===== 采样参数 =====
+  "temperature": true,              // 温度 (0~1)
+  "top_p": true,                    // Top-P 核采样 (0~1, 建议改temperature或top_p之一)
+  "top_k": true,                    // Top-K 采样 (仅采样概率最高的K个token)
+
+  // ===== 输出控制 =====
+  "stop_sequences": true,           // 自定义停止序列 (最多多个字符串)
+
+  // ===== 工具调用 =====
+  "tools": true,                    // 工具定义列表 (name, description, input_schema)
+  "tool_choice": true,              // 工具选择策略 (auto/any/tool/none)
+
+  // ===== 多模态 - 图片 =====
+  "messages_image_base64": true,    // messages 中通过 base64 传图片
+  "messages_image_url": true,       // messages 中通过 URL 传图片
+
+  // ===== 多模态 - PDF =====
+  "messages_pdf_base64": false,     // messages 中通过 base64 传 PDF
+
+  // ===== 提示词缓存 =====
+  "cache_control": true,            // 提示词缓存控制 (cache_control: {type: "ephemeral"})
+
+  // ===== 扩展思考 =====
+  "thinking": true,                 // 扩展思考 (type: "enabled", budget_tokens)
+
+  // ===== 元数据 =====
+  "metadata": false,                // 元数据 (user_id)
+
+  // ===== 服务层级 =====
+  "service_tier": false             // 服务层级 (beta)
+}

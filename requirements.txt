@@ -1,0 +1,8 @@
+httpx
+pytest
+pytest-asyncio
+pyyaml
+json5
+tenacity
+rich
+allpairspy

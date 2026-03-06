@@ -1,0 +1,41 @@
+{
+  "id": "chatcmpl-xxx",
+  "object": "chat.completion",
+  "created": 0,
+  "model": "string",
+  "system_fingerprint": "string",
+  "service_tier": "string",
+  "choices": [
+    {
+      "index": 0,
+      "message": {
+        "role": "assistant",
+        "content": "string",
+        "tool_calls": [
+          {
+            "id": "call_xxx",
+            "type": "function",
+            "function": {
+              "name": "string",
+              "arguments": "string"
+            }
+          }
+        ],
+        "refusal": null
+      },
+      "finish_reason": "stop",
+      "logprobs": null
+    }
+  ],
+  "usage": {
+    "prompt_tokens": 0,
+    "completion_tokens": 0,
+    "total_tokens": 0,
+    "prompt_tokens_details": {
+      "cached_tokens": 0
+    },
+    "completion_tokens_details": {
+      "reasoning_tokens": 0
+    }
+  }
+}

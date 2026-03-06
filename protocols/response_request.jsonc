@@ -1,0 +1,52 @@
+{
+  // OpenAI Response API 请求体配置
+  // true = 需要测试, false = 不需要测试
+  // 标注 [必须] 的为必须项
+
+  // ===== 必须项 =====
+  "model": true,                    // [必须] 模型名称
+  "input": true,                    // [必须] 输入内容 (string 或 message array)
+
+  // ===== 流式控制 =====
+  "stream": true,                   // 是否流式返回
+
+  // ===== 系统指令 =====
+  "instructions": true,             // 系统指令 (类似 system prompt)
+
+  // ===== 采样参数 =====
+  "temperature": true,              // 温度 (0~2)
+  "top_p": true,                    // Top-P 核采样
+
+  // ===== 输出控制 =====
+  "max_output_tokens": true,        // 最大输出token数
+  "text": true,                     // 文本输出配置 (format: text/json_object/json_schema)
+
+  // ===== 工具调用 =====
+  "tools": true,                    // 工具定义列表 (function / web_search / file_search / code_interpreter)
+  "tool_choice": true,              // 工具选择策略 (none/auto/required/指定函数)
+  "parallel_tool_calls": true,      // 是否允许并行工具调用
+
+  // ===== 多模态 =====
+  "input_image_url": true,          // input 中通过 URL 传图片
+  "input_image_base64": true,       // input 中通过 base64 传图片
+
+  // ===== 推理模型 =====
+  "reasoning": false,               // 推理配置 (effort: low/medium/high)
+
+  // ===== 多轮上下文 =====
+  "previous_response_id": false,    // 引用之前的 response 作为上下文
+
+  // ===== 响应包含项 =====
+  "include": false,                 // 响应中包含的额外内容列表
+
+  // ===== 截断策略 =====
+  "truncation": false,              // 上下文截断策略 (auto/disabled)
+
+  // ===== 元数据 =====
+  "user": false,                    // 用户标识
+  "store": false,                   // 是否存储 (用于蒸馏/评估)
+  "metadata": false,                // 元数据键值对
+
+  // ===== 服务层级 =====
+  "service_tier": false             // 服务层级 (auto/default/flex)
+}

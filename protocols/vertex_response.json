@@ -1,0 +1,38 @@
+{
+  "candidates": [
+    {
+      "content": {
+        "parts": [
+          {
+            "text": "string"
+          },
+          {
+            "functionCall": {
+              "name": "string",
+              "args": {}
+            }
+          }
+        ],
+        "role": "model"
+      },
+      "finishReason": "STOP",
+      "safetyRatings": [
+        {
+          "category": "HARM_CATEGORY_HARASSMENT",
+          "probability": "NEGLIGIBLE"
+        }
+      ],
+      "citationMetadata": {
+        "citationSources": []
+      },
+      "avgLogprobs": 0.0
+    }
+  ],
+  "usageMetadata": {
+    "promptTokenCount": 0,
+    "candidatesTokenCount": 0,
+    "totalTokenCount": 0,
+    "cachedContentTokenCount": 0
+  },
+  "modelVersion": "string"
+}

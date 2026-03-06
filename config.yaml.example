@@ -1,0 +1,57 @@
+# ===== 协议接入点配置 =====
+protocols:
+  openai:
+    base_url: "https://api.openai.com/v1"
+    api_key: "sk-xxx"
+    models:
+      thinking: []
+      non_thinking:
+        - "gpt-4o"
+
+  anthropic:
+    base_url: "https://api.anthropic.com"
+    api_key: "sk-ant-xxx"
+    # auth_header: "x-api-key" 或 "authorization"
+    auth_header: "x-api-key"
+    models:
+      thinking:
+        - "claude-sonnet-4-20250514"
+      non_thinking:
+        - "claude-sonnet-4-20250514"
+
+  vertex:
+    base_url: "https://us-central1-aiplatform.googleapis.com/v1/projects/YOUR_PROJECT/locations/us-central1/publishers/google/models"
+    api_key: "ya29.xxx"
+    models:
+      thinking: []
+      non_thinking:
+        - "gemini-2.0-flash"
+
+  response:
+    base_url: "https://api.openai.com/v1"
+    api_key: "sk-xxx"
+    models:
+      thinking: []
+      non_thinking:
+        - "gpt-4o"
+
+# ===== 测试层级控制 =====
+test_levels:
+  level1: true
+  level2: false
+  level3: false
+
+# ===== AI 检验配置 =====
+ai_validation:
+  enabled: false
+  base_url: "https://api.openai.com/v1"
+  api_key: "sk-xxx"
+  model: "gpt-4o"
+
+# ===== 重试配置 =====
+retry:
+  enabled: true
+  max_attempts: 3
+  # 指数退避: wait = multiplier * (2 ^ attempt), 最大 max_wait 秒
+  multiplier: 1
+  max_wait: 30
