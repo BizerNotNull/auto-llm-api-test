@@ -243,7 +243,7 @@ curl 中的 API Key 自动脱敏。
 
 ## 贡献
 
-参见 [CONTRIBUTING.md](CONTRIBUTING.md)，涵盖：
+参见 [CONTRIBUTING_CN.md](CONTRIBUTING_CN.md)，涵盖：
 
 - 给现有协议添加新的请求参数
 - 添加参数专属断言
