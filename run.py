@@ -1,4 +1,5 @@
 """入口文件 - 使用 Rich 控制台运行 pytest"""
+import os
 import sys
 import subprocess
 from pathlib import Path
@@ -59,14 +60,14 @@ def main():
     console.rule("[bold]Running Tests")
     console.print()
 
-    # 运行 pytest
+    # 运行 pytest (使用 UTF-8 避免 Windows GBK 编码问题)
     root = Path(__file__).resolve().parent
+    env = os.environ.copy()
+    env["PYTHONUTF8"] = "1"
     args = [
         sys.executable, "-m", "pytest",
         str(root / "tests"),
-        "-v",
         "--tb=short",
-        "-q",
         "--no-header",
         "-n", "auto",
     ]
@@ -74,7 +75,7 @@ def main():
     # 将额外命令行参数传递给 pytest
     args.extend(sys.argv[1:])
 
-    result = subprocess.run(args, cwd=str(root))
+    result = subprocess.run(args, cwd=str(root), env=env)
     sys.exit(result.returncode)
 
 

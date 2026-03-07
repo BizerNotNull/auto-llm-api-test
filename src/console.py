@@ -1,10 +1,20 @@
 """Rich 控制台输出模块"""
+import io
+import sys
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, BarColumn, TextColumn, TimeElapsedColumn
 from rich.live import Live
 from rich.table import Table
 from rich.text import Text
 
+
+# Windows GBK 终端无法显示 Rich 的 Unicode spinner，强制使用 UTF-8
+if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
 
 console = Console()
 
