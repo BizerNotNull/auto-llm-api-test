@@ -68,6 +68,7 @@ def main():
         "--tb=short",
         "-q",
         "--no-header",
+        "-n", "auto",
     ]
 
     # 将额外命令行参数传递给 pytest
