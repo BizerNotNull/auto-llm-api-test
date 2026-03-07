@@ -119,47 +119,71 @@ ANTHROPIC_CACHE_PARAMS = _anthropic_cache_params()
                          ids=[f"anthropic-cache-{m}" for _, m in ANTHROPIC_CACHE_PARAMS])
 @pytest.mark.asyncio
 async def test_anthropic_prompt_caching(protocol_name, model, long_prompt):
-    """Anthropic 提示词缓存测试 - 需要足够 token 量 + 随机前缀"""
+    """Anthropic 提示词缓存测试 - 发送两次相同请求验证缓存创建与命中
+
+    测试逻辑:
+    1. 第一次请求: 带 cache_control 的 system prompt → 期望 cache_creation_input_tokens > 0
+    2. 第二次请求: 相同内容 → 期望 cache_read_input_tokens > 0
+    使用固定 session_id 保证两次请求的缓存内容一致，
+    同时每次测试运行生成新 session_id 避免与之前运行冲突。
+    """
+    import uuid as _uuid
     builder = AnthropicBuilder()
     client = get_client(config, "anthropic")
-    body = builder.build_cache_test(model, long_prompt)
+    session_id = _uuid.uuid4().hex[:12]
     test_name = f"L2_cache_anthropic_{model}"
 
     retry_decorator = make_retry_decorator(config.retry)
 
-    @retry_decorator
-    async def _do_request():
-        status, text, data = await client.request(body, model=model)
-        method, url, headers = client.get_request_info(body, model=model)
+    async def _single_request(body, phase: str):
+        """发送单次请求并返回 (data, usage)"""
+        @retry_decorator
+        async def _do():
+            status, text, data = await client.request(body, model=model)
+            method, url, headers = client.get_request_info(body, model=model)
 
-        if status != 200:
-            log_failure(test_name, method, url, headers, body, status, text,
-                        reason=f"HTTP {status}")
-            raise RequestFailed(status, text, f"HTTP {status}")
+            if status != 200:
+                log_failure(f"{test_name}_{phase}", method, url, headers, body,
+                            status, text, reason=f"HTTP {status}")
+                raise RequestFailed(status, text, f"HTTP {status}")
 
-        errors = builder.assert_non_stream_response(data)
+            errors = builder.assert_non_stream_response(data)
+            if errors:
+                log_failure(f"{test_name}_{phase}", method, url, headers, body,
+                            status, text, reason="; ".join(errors))
+                raise RequestFailed(status, text, "; ".join(errors))
 
-        # 检查 usage 中的缓存相关字段
-        usage = builder.extract_usage(data)
-        if usage:
-            # 第一次请求应该有 cache_creation_input_tokens
-            cache_creation = usage.get("cache_creation_input_tokens", 0)
-            cache_read = usage.get("cache_read_input_tokens", 0)
-            if cache_creation == 0 and cache_read == 0:
-                errors.append(
-                    "No cache tokens in usage "
-                    "(cache_creation_input_tokens=0, cache_read_input_tokens=0)")
+            log_success(f"{test_name}_{phase}", method, url, headers, body,
+                        status, text)
+            return data
 
-        if errors:
-            log_failure(test_name, method, url, headers, body, status, text,
-                        reason="; ".join(errors))
-            raise RequestFailed(status, text, "; ".join(errors))
+        return await _do()
 
-        log_success(test_name, method, url, headers, body, status, text)
-        return data
+    body = builder.build_cache_test(model, long_prompt, session_id=session_id)
 
     try:
-        await _do_request()
+        # ---- 第 1 次请求: 创建缓存 ----
+        data1 = await _single_request(body, "create")
+        usage1 = builder.extract_usage(data1)
+        cache_creation = (usage1 or {}).get("cache_creation_input_tokens", 0)
+        cache_read_1 = (usage1 or {}).get("cache_read_input_tokens", 0)
+
+        if cache_creation == 0 and cache_read_1 == 0:
+            pytest.fail(
+                f"Request 1: No cache tokens in usage "
+                f"(cache_creation_input_tokens=0, cache_read_input_tokens=0). "
+                f"usage={usage1}")
+
+        # ---- 第 2 次请求: 命中缓存 ----
+        data2 = await _single_request(body, "read")
+        usage2 = builder.extract_usage(data2)
+        cache_read_2 = (usage2 or {}).get("cache_read_input_tokens", 0)
+
+        if cache_read_2 == 0:
+            pytest.fail(
+                f"Request 2: cache_read_input_tokens=0, cache not hit. "
+                f"usage={usage2}")
+
     except RetryError as e:
         last = e.last_attempt.exception()
         if config.ai_validation.enabled and isinstance(last, RequestFailed):

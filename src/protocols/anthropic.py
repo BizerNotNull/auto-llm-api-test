@@ -139,16 +139,22 @@ class AnthropicBuilder(ProtocolBuilder):
 
         return body
 
-    def build_cache_test(self, model: str, long_prompt: str) -> dict:
-        """构建提示词缓存测试请求 - 需要足够的 token 量 + 随机前缀避免干扰"""
-        random_prefix = f"[cache-test-{uuid.uuid4().hex[:8]}] "
+    def build_cache_test(self, model: str, long_prompt: str,
+                         session_id: str | None = None) -> dict:
+        """构建提示词缓存测试请求
+
+        session_id: 同一 session_id 的请求共享缓存内容，
+                    不同 session_id 则创建新缓存。
+                    为 None 时使用随机 ID（向后兼容）。
+        """
+        prefix = f"[cache-test-{session_id or uuid.uuid4().hex[:8]}] "
         return {
             "model": model,
             "max_tokens": 256,
             "system": [
                 {
                     "type": "text",
-                    "text": random_prefix + long_prompt,
+                    "text": prefix + long_prompt,
                     "cache_control": {"type": "ephemeral"},
                 }
             ],
