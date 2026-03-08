@@ -33,6 +33,11 @@ class ProtocolConfig:
 
 
 @dataclass
+class OutputConfig:
+    show_failure_details: bool = True
+
+
+@dataclass
 class RetryConfig:
     enabled: bool = True
     max_attempts: int = 3
@@ -54,6 +59,7 @@ class Config:
     test_levels: dict[str, bool] = field(default_factory=dict)
     retry: RetryConfig = field(default_factory=RetryConfig)
     ai_validation: AIValidationConfig = field(default_factory=AIValidationConfig)
+    output: OutputConfig = field(default_factory=OutputConfig)
 
     # 协议的请求体配置(哪些字段需要测试)
     request_configs: dict[str, dict[str, bool]] = field(default_factory=dict)
@@ -101,6 +107,12 @@ def load_config() -> Config:
         base_url=ai_raw.get("base_url", ""),
         api_key=ai_raw.get("api_key", ""),
         model=ai_raw.get("model", ""),
+    )
+
+    # 输出配置
+    output_raw = raw.get("output", {})
+    config.output = OutputConfig(
+        show_failure_details=output_raw.get("show_failure_details", True),
     )
 
     # 加载各协议的请求体配置 (jsonc) 和响应体模板

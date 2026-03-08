@@ -5,4 +5,5 @@ pyyaml
 json5
 tenacity
 rich
+pytest-xdist
 allpairspy

@@ -1,9 +1,17 @@
 """日志记录模块 - 记录成功/失败的请求 curl 和 response"""
 import json
+import os
 import datetime
 from pathlib import Path
 
 from src.config import LOGS_DIR
+
+# 每次运行生成一个时间戳，所有 worker 共享同一文件名
+# xdist worker 通过环境变量继承主进程的值
+_SESSION_TS = os.environ.get("LLMTEST_SESSION_TS")
+if not _SESSION_TS:
+    _SESSION_TS = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+    os.environ["LLMTEST_SESSION_TS"] = _SESSION_TS
 
 
 def _ensure_logs_dir():
@@ -62,7 +70,7 @@ def log_success(test_name: str, method: str, url: str, headers: dict,
     """记录成功的请求"""
     curl_str = _format_curl(method, url, headers, body)
     resp_str = _format_response(status_code, response_body)
-    _write_log("success.log", test_name, curl_str, resp_str)
+    _write_log(f"success_{_SESSION_TS}.log", test_name, curl_str, resp_str)
 
 
 def log_failure(test_name: str, method: str, url: str, headers: dict,
@@ -72,7 +80,7 @@ def log_failure(test_name: str, method: str, url: str, headers: dict,
     curl_str = _format_curl(method, url, headers, body)
     resp_str = _format_response(status_code, response_body)
     extra = f"Failure reason: {reason}" if reason else ""
-    _write_log("failure.log", test_name, curl_str, resp_str, extra)
+    _write_log(f"failure_{_SESSION_TS}.log", test_name, curl_str, resp_str, extra)
 
 
 def get_curl_and_response(method: str, url: str, headers: dict,
