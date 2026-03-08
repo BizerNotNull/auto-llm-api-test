@@ -56,6 +56,7 @@ class RichReporter:
         self._unstable = 0
         self._failures: list[tuple[str, str]] = []  # (nodeid, reason)
         self._show_failure_details = True
+        self._finished = False
 
     # -- helpers ----------------------------------------------------------
 
@@ -89,6 +90,7 @@ class RichReporter:
     def pytest_collection_modifyitems(self, config, items):
         self._total = len(items)
 
+    @pytest.hookimpl(optionalhook=True)
     def pytest_xdist_node_collection_finished(self, node, ids):
         """xdist controller receives total item count from workers."""
         if self._total == 0:
@@ -106,7 +108,9 @@ class RichReporter:
         if self._display is not None:
             return
         self._display = TestDisplay(max(self._total, 1))
-        self._display.progress.start()
+        # Don't call progress.start() — Progress inherits from Live, so
+        # starting it would register a live display on the console and
+        # conflict with the Live object below.
         self._live = Live(
             self._build_live_table(),
             console=console,
@@ -155,17 +159,17 @@ class RichReporter:
                     self._live.update(self._build_live_table())
 
     def pytest_sessionfinish(self, session, exitstatus):
+        if self._finished:
+            return
+        self._finished = True
+
         # Stop live display
         if self._live:
             try:
                 self._live.stop()
             except Exception:
                 pass
-        if self._display:
-            try:
-                self._display.progress.stop()
-            except Exception:
-                pass
+        # progress was never start()'ed separately — no need to stop it
 
         # Nothing to report if display was never started
         if self._display is None:
@@ -302,12 +306,28 @@ def get_client(config: Config, protocol_name: str) -> LLMClient:
 # ===== pytest 收集阶段: 根据配置跳过未开启的测试层 =====
 
 def pytest_collection_modifyitems(config, items):
-    """根据 config.yaml 中的 test_levels 跳过未开启的测试层"""
+    """根据 --protocol 过滤协议, 根据 config.yaml 跳过未开启的测试层"""
     try:
         cfg = load_config()
     except Exception:
         return
 
+    # --protocol 过滤: deselect 不匹配的协议
+    protocol = config.getoption("--protocol", default=None)
+    if protocol:
+        selected = []
+        deselected = []
+        for item in items:
+            # 参数化 ID 格式: [protocol-model-...], 非参数化测试直接保留
+            if f"[{protocol}-" in item.nodeid or "[" not in item.nodeid:
+                selected.append(item)
+            else:
+                deselected.append(item)
+        if deselected:
+            config.hook.pytest_deselected(items=deselected)
+            items[:] = selected
+
+    # 测试层级过滤
     level_map = {
         "test_level1": cfg.test_levels.get("level1", True),
         "test_level2": cfg.test_levels.get("level2", False),

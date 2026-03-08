@@ -36,14 +36,14 @@ class LLMClient:
         base = self.protocol.base_url.rstrip("/")
 
         if self.protocol.name == "openai":
-            return f"{base}/chat/completions"
+            return f"{base}"
         elif self.protocol.name == "anthropic":
-            return f"{base}/v1/messages"
+            return f"{base}"
         elif self.protocol.name == "vertex":
             action = "streamGenerateContent" if stream else "generateContent"
             return f"{base}/{model}:{action}"
         elif self.protocol.name == "response":
-            return f"{base}/responses"
+            return f"{base}"
         return base
 
     async def request(
