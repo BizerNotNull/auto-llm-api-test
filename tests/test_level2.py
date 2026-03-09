@@ -136,7 +136,7 @@ async def test_anthropic_prompt_caching(protocol_name, model, long_prompt):
     retry_decorator = make_retry_decorator(config.retry)
 
     async def _single_request(body, phase: str):
-        """发送单次请求并返回 (data, usage)"""
+        """发送单次请求并返回 data，缓存断言在内部完成（可 retry）"""
         @retry_decorator
         async def _do():
             status, text, data = await client.request(body, model=model)
@@ -148,6 +148,31 @@ async def test_anthropic_prompt_caching(protocol_name, model, long_prompt):
                 raise RequestFailed(status, text, f"HTTP {status}")
 
             errors = builder.assert_non_stream_response(data)
+
+            # ---- 缓存专属断言 ----
+            usage = builder.extract_usage(data) or {}
+            if phase == "create":
+                has_creation = "cache_creation_input_tokens" in usage
+                has_read = "cache_read_input_tokens" in usage
+                if not has_creation and not has_read:
+                    errors.append(
+                        "usage 中缺少缓存字段 "
+                        "(cache_creation_input_tokens 和 cache_read_input_tokens 均不存在), "
+                        f"可能提示词 token 数不足最低缓存要求. usage={usage}")
+                elif usage.get("cache_creation_input_tokens", 0) == 0 \
+                        and usage.get("cache_read_input_tokens", 0) == 0:
+                    errors.append(
+                        "缓存未创建 "
+                        f"(cache_creation_input_tokens=0, cache_read_input_tokens=0). "
+                        f"usage={usage}")
+            elif phase == "read":
+                if "cache_read_input_tokens" not in usage:
+                    errors.append(
+                        f"usage 中缺少 cache_read_input_tokens 字段. usage={usage}")
+                elif usage.get("cache_read_input_tokens", 0) == 0:
+                    errors.append(
+                        f"cache_read_input_tokens=0, 缓存未命中. usage={usage}")
+
             if errors:
                 log_failure(f"{test_name}_{phase}", method, url, headers, body,
                             status, text, reason="; ".join(errors))
@@ -163,26 +188,9 @@ async def test_anthropic_prompt_caching(protocol_name, model, long_prompt):
 
     try:
         # ---- 第 1 次请求: 创建缓存 ----
-        data1 = await _single_request(body, "create")
-        usage1 = builder.extract_usage(data1)
-        cache_creation = (usage1 or {}).get("cache_creation_input_tokens", 0)
-        cache_read_1 = (usage1 or {}).get("cache_read_input_tokens", 0)
-
-        if cache_creation == 0 and cache_read_1 == 0:
-            pytest.fail(
-                f"Request 1: No cache tokens in usage "
-                f"(cache_creation_input_tokens=0, cache_read_input_tokens=0). "
-                f"usage={usage1}")
-
+        await _single_request(body, "create")
         # ---- 第 2 次请求: 命中缓存 ----
-        data2 = await _single_request(body, "read")
-        usage2 = builder.extract_usage(data2)
-        cache_read_2 = (usage2 or {}).get("cache_read_input_tokens", 0)
-
-        if cache_read_2 == 0:
-            pytest.fail(
-                f"Request 2: cache_read_input_tokens=0, cache not hit. "
-                f"usage={usage2}")
+        await _single_request(body, "read")
 
     except RetryError as e:
         last = e.last_attempt.exception()

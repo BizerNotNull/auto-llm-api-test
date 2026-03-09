@@ -14,8 +14,44 @@ from src.config import load_config
 console = Console()
 
 
+def _export_curl(config, protocol_filter: str | None = None):
+    """导出所有测试用例为 curl 命令"""
+    from src.export import export_all_curls
+
+    console.print()
+    console.print(Panel.fit(
+        "[bold cyan]LLM API Auto Test — Export Curl[/bold cyan]",
+        subtitle="Generating curl commands without sending requests",
+    ))
+    console.print()
+
+    out_path, total, sections = export_all_curls(
+        config, protocol_filter=protocol_filter)
+
+    # 显示导出统计
+    for section_title, items in sections:
+        console.print(f"  [bold]{section_title}[/bold]: {len(items)} curls")
+    console.print()
+    console.print(f"  [green]Total: {total} curl commands[/green]")
+    console.print(f"  Output: [link=file://{out_path}]{out_path}[/link]")
+    console.print()
+
+
 def main():
     config = load_config()
+
+    # 检查 --export-curl 标志
+    argv = sys.argv[1:]
+    if "--export-curl" in argv:
+        argv_rest = [a for a in argv if a != "--export-curl"]
+        # 支持 --protocol 过滤
+        protocol_filter = None
+        if "--protocol" in argv_rest:
+            idx = argv_rest.index("--protocol")
+            if idx + 1 < len(argv_rest):
+                protocol_filter = argv_rest[idx + 1]
+        _export_curl(config, protocol_filter=protocol_filter)
+        return
 
     # 显示配置摘要
     console.print()

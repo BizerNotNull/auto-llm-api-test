@@ -141,6 +141,18 @@ class VertexBuilder(ProtocolBuilder):
                     "functionCallingConfig": {"mode": "AUTO"}
                 },
             },
+            "function_call": {
+                "contents": [
+                    {
+                        "role": "user",
+                        "parts": [{"text": "What is the weather in San Francisco?"}],
+                    }
+                ],
+                "tools": [_TOOL_DEF],
+                "toolConfig": {
+                    "functionCallingConfig": {"mode": "ANY"}
+                },
+            },
 
             # ===== 多模态 - 图片 base64 =====
             "contents_image_base64": {
@@ -279,6 +291,19 @@ class VertexBuilder(ProtocolBuilder):
                             errors.append(f"[{option_name}] functionCall[{i}].name is empty")
                         if "args" not in fc:
                             errors.append(f"[{option_name}] functionCall[{i}].args missing")
+
+        elif option_name == "function_call":
+            # mode=ANY 强制函数调用，必须返回 functionCall
+            has_fc = any(p.get("functionCall") for p in parts)
+            if not has_fc:
+                errors.append("[function_call] Expected functionCall in response (mode=ANY) but got none")
+            for i, p in enumerate(parts):
+                fc = p.get("functionCall")
+                if fc:
+                    if not fc.get("name"):
+                        errors.append(f"[function_call] functionCall[{i}].name is empty")
+                    if "args" not in fc:
+                        errors.append(f"[function_call] functionCall[{i}].args missing")
 
         elif option_name in ("responseMimeType", "responseSchema"):
             # 期望返回 JSON 内容

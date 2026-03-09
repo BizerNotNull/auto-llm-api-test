@@ -35,7 +35,8 @@
 
   // ===== 工具调用 =====
   "tools": true,                    // 工具声明 (functionDeclarations)
-  "toolConfig": true,               // 工具配置 (functionCallingConfig: mode)
+  "toolConfig": true,               // 工具配置 (functionCallingConfig: mode AUTO)
+  "function_call": true,            // 强制函数调用 (functionCallingConfig: mode ANY, 必须返回 functionCall)
 
   // ===== 多模态 =====
   "contents_image_base64": true,    // contents 中通过 inlineData 传图片

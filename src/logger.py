@@ -6,12 +6,12 @@ from pathlib import Path
 
 from src.config import LOGS_DIR
 
-# 每次运行生成一个时间戳，所有 worker 共享同一文件名
-# xdist worker 通过环境变量继承主进程的值
-_SESSION_TS = os.environ.get("LLMTEST_SESSION_TS")
-if not _SESSION_TS:
-    _SESSION_TS = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
-    os.environ["LLMTEST_SESSION_TS"] = _SESSION_TS
+# 时间戳由 conftest.py 在 pytest_configure 阶段设置到环境变量
+# 直接运行时 (非 pytest) 仍需要 fallback
+_SESSION_TS = os.environ.get(
+    "LLMTEST_SESSION_TS",
+    datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
+)
 
 
 def _ensure_logs_dir():
@@ -22,13 +22,17 @@ def _timestamp() -> str:
     return datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
 
-def _format_curl(method: str, url: str, headers: dict, body: dict | None) -> str:
-    """将请求格式化为 curl 命令"""
+def format_curl(method: str, url: str, headers: dict, body: dict | None,
+                 redact: bool = True) -> str:
+    """将请求格式化为 curl 命令
+
+    Args:
+        redact: 是否隐藏 API key 中间部分，默认 True
+    """
     parts = [f"curl -X {method.upper()} '{url}'"]
     for k, v in headers.items():
-        # 隐藏 api key 的中间部分
         val = str(v)
-        if any(secret in k.lower() for secret in ["authorization", "x-api-key", "api-key"]):
+        if redact and any(secret in k.lower() for secret in ["authorization", "x-api-key", "api-key"]):
             if len(val) > 12:
                 val = val[:8] + "..." + val[-4:]
         parts.append(f"  -H '{k}: {val}'")
@@ -68,7 +72,7 @@ def _write_log(filename: str, test_name: str, curl_str: str, response_str: str,
 def log_success(test_name: str, method: str, url: str, headers: dict,
                 body: dict | None, status_code: int, response_body: str):
     """记录成功的请求"""
-    curl_str = _format_curl(method, url, headers, body)
+    curl_str = format_curl(method, url, headers, body)
     resp_str = _format_response(status_code, response_body)
     _write_log(f"success_{_SESSION_TS}.log", test_name, curl_str, resp_str)
 
@@ -77,7 +81,7 @@ def log_failure(test_name: str, method: str, url: str, headers: dict,
                 body: dict | None, status_code: int, response_body: str,
                 reason: str = ""):
     """记录失败的请求"""
-    curl_str = _format_curl(method, url, headers, body)
+    curl_str = format_curl(method, url, headers, body)
     resp_str = _format_response(status_code, response_body)
     extra = f"Failure reason: {reason}" if reason else ""
     _write_log(f"failure_{_SESSION_TS}.log", test_name, curl_str, resp_str, extra)
@@ -88,6 +92,6 @@ def get_curl_and_response(method: str, url: str, headers: dict,
                           response_body: str) -> tuple[str, str]:
     """返回格式化后的 curl 和 response 字符串（用于 AI 检验）"""
     return (
-        _format_curl(method, url, headers, body),
+        format_curl(method, url, headers, body),
         _format_response(status_code, response_body),
     )

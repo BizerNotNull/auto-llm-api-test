@@ -85,6 +85,13 @@ class OpenAIBuilder(ProtocolBuilder):
             # ===== 工具调用 =====
             "tools": {"tools": [_TOOL_DEF]},
             "tool_choice": {"tools": [_TOOL_DEF], "tool_choice": "auto"},
+            "function_call": {
+                "tools": [_TOOL_DEF],
+                "tool_choice": "required",
+                "messages": [
+                    {"role": "user", "content": "What is the weather in San Francisco?"},
+                ],
+            },
             "parallel_tool_calls": {"tools": [_TOOL_DEF], "parallel_tool_calls": True},
 
             # ===== 多模态 =====
@@ -93,7 +100,7 @@ class OpenAIBuilder(ProtocolBuilder):
                     {"role": "user", "content": [
                         {"type": "text", "text": "What is in this image?"},
                         {"type": "image_url", "image_url": {
-                            "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png"
+                            "url": "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"
                         }},
                     ]},
                 ],
@@ -212,6 +219,21 @@ class OpenAIBuilder(ProtocolBuilder):
                             errors.append(f"[{option_name}] tool_calls[{i}].function.name is empty")
                         if "arguments" not in fn:
                             errors.append(f"[{option_name}] tool_calls[{i}].function.arguments missing")
+
+        elif option_name == "function_call":
+            # tool_choice=required 强制函数调用，必须返回 tool_calls
+            tc = message.get("tool_calls")
+            if not tc:
+                errors.append("[function_call] Expected tool_calls in response (tool_choice=required) but got none")
+            else:
+                for i, call in enumerate(tc):
+                    if call.get("type") != "function":
+                        errors.append(f"[function_call] tool_calls[{i}].type != 'function'")
+                    fn = call.get("function", {})
+                    if not fn.get("name"):
+                        errors.append(f"[function_call] tool_calls[{i}].function.name is empty")
+                    if "arguments" not in fn:
+                        errors.append(f"[function_call] tool_calls[{i}].function.arguments missing")
 
         elif option_name == "response_format":
             # response_format=json_object → content 必须是合法 JSON

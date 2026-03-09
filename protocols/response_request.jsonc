@@ -23,7 +23,8 @@
 
   // ===== 工具调用 =====
   "tools": true,                    // 工具定义列表 (function / web_search / file_search / code_interpreter)
-  "tool_choice": true,              // 工具选择策略 (none/auto/required/指定函数)
+  "tool_choice": true,              // 工具选择策略 (auto)
+  "function_call": true,            // 强制函数调用 (tool_choice=required, 必须返回 function_call)
   "parallel_tool_calls": true,      // 是否允许并行工具调用
 
   // ===== 多模态 =====

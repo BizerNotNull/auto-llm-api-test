@@ -1,5 +1,7 @@
 """pytest 根 conftest - 全局 fixtures, 配置, Rich reporter plugin"""
+import datetime
 import io
+import os
 import threading
 import pytest
 from src.config import load_config, Config, load_prompt, get_optional_fields
@@ -9,6 +11,10 @@ from src.protocols.anthropic import AnthropicBuilder
 from src.protocols.vertex import VertexBuilder
 from src.protocols.response import ResponseBuilder
 from src.console import TestDisplay, print_summary, STATUS_COLORS, console
+
+# Ensure session timestamp is set early (before logger.py is imported)
+if not os.environ.get("LLMTEST_SESSION_TS"):
+    os.environ["LLMTEST_SESSION_TS"] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
 from rich.live import Live
 from rich.table import Table
@@ -221,10 +227,18 @@ class RichReporter:
 
 # -- Module-level hook: register plugins ---------------------------------
 
+def pytest_configure_node(node):
+    """xdist controller -> worker: pass session timestamp."""
+    node.workerinput["session_ts"] = os.environ["LLMTEST_SESSION_TS"]
+
+
 @pytest.hookimpl(trylast=True)
 def pytest_configure(config):
-    # Skip in xdist workers
+    # xdist worker: inherit session timestamp from controller, then skip reporter setup
     if hasattr(config, "workerinput"):
+        ts = config.workerinput.get("session_ts")
+        if ts:
+            os.environ["LLMTEST_SESSION_TS"] = ts
         return
 
     # Unregister default terminal reporter (registered by _pytest.terminal)

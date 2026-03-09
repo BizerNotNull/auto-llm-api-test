@@ -65,11 +65,18 @@ class AnthropicBuilder(ProtocolBuilder):
             "top_k": {"top_k": 40},
 
             # ===== 输出控制 =====
-            "stop_sequences": {"stop_sequences": ["\n\n\n"]},
+            "stop_sequences": {"stop_sequences": ["---END---"]},
 
             # ===== 工具调用 =====
             "tools": {"tools": [_TOOL_DEF]},
             "tool_choice": {"tools": [_TOOL_DEF], "tool_choice": {"type": "auto"}},
+            "function_call": {
+                "tools": [_TOOL_DEF],
+                "tool_choice": {"type": "any"},
+                "messages": [
+                    {"role": "user", "content": "What is the weather in San Francisco?"},
+                ],
+            },
 
             # ===== 多模态 - 图片 base64 =====
             "messages_image_base64": {
@@ -92,7 +99,7 @@ class AnthropicBuilder(ProtocolBuilder):
                         {"type": "text", "text": "What is in this image?"},
                         {"type": "image", "source": {
                             "type": "url",
-                            "url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png",
+                            "url": "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png",
                         }},
                     ]},
                 ],
@@ -232,6 +239,20 @@ class AnthropicBuilder(ProtocolBuilder):
                             errors.append(f"[{option_name}] tool_use block missing 'name'")
                         if "input" not in b:
                             errors.append(f"[{option_name}] tool_use block missing 'input'")
+
+        elif option_name == "function_call":
+            # tool_choice type=any 强制函数调用，必须返回 tool_use
+            has_tool_use = any(b.get("type") == "tool_use" for b in content_blocks)
+            if not has_tool_use:
+                errors.append("[function_call] Expected tool_use in response (tool_choice type=any) but got none")
+            for b in content_blocks:
+                if b.get("type") == "tool_use":
+                    if not b.get("id"):
+                        errors.append("[function_call] tool_use block missing 'id'")
+                    if not b.get("name"):
+                        errors.append("[function_call] tool_use block missing 'name'")
+                    if "input" not in b:
+                        errors.append("[function_call] tool_use block missing 'input'")
 
         elif option_name == "thinking":
             has_thinking = any(b.get("type") == "thinking" for b in content_blocks)
