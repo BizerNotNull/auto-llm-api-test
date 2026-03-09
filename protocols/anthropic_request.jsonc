@@ -24,7 +24,8 @@
 
   // ===== 工具调用 =====
   "tools": true,                    // 工具定义列表 (name, description, input_schema)
-  "tool_choice": true,              // 工具选择策略 (auto/any/tool/none)
+  "tool_choice": true,              // 工具选择策略 (auto)
+  "function_call": true,            // 强制函数调用 (tool_choice type=any, 必须返回 tool_use)
 
   // ===== 多模态 - 图片 =====
   "messages_image_base64": true,    // messages 中通过 base64 传图片

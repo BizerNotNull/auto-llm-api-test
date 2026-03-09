@@ -63,12 +63,17 @@ class ResponseBuilder(ProtocolBuilder):
             "top_p": {"top_p": 0.9},
 
             # ===== 输出控制 =====
-            "max_output_tokens": {"max_output_tokens": 100},
+            "max_output_tokens": {"max_output_tokens": 1024},
             "text": {"text": {"format": {"type": "text"}}},
 
             # ===== 工具调用 =====
             "tools": {"tools": [_TOOL_DEF]},
             "tool_choice": {"tools": [_TOOL_DEF], "tool_choice": "auto"},
+            "function_call": {
+                "tools": [_TOOL_DEF],
+                "tool_choice": "required",
+                "input": "What is the weather in San Francisco?",
+            },
             "parallel_tool_calls": {"tools": [_TOOL_DEF], "parallel_tool_calls": True},
 
             # ===== 多模态 - 图片 URL =====
@@ -76,7 +81,7 @@ class ResponseBuilder(ProtocolBuilder):
                 "input": [
                     {"role": "user", "content": [
                         {"type": "input_text", "text": "What is in this image?"},
-                        {"type": "input_image", "image_url": "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/280px-PNG_transparency_demonstration_1.png"},
+                        {"type": "input_image", "image_url": "https://www.google.com/images/branding/googlelogo/2x/googlelogo_color_272x92dp.png"},
                     ]},
                 ],
             },
@@ -195,6 +200,18 @@ class ResponseBuilder(ProtocolBuilder):
                             errors.append(f"[{option_name}] function_call.name is empty")
                         if "arguments" not in item:
                             errors.append(f"[{option_name}] function_call.arguments missing")
+
+        elif option_name == "function_call":
+            # tool_choice=required 强制函数调用，必须返回 function_call
+            has_fc = any(item.get("type") == "function_call" for item in output)
+            if not has_fc:
+                errors.append("[function_call] Expected function_call in output (tool_choice=required) but got none")
+            for item in output:
+                if item.get("type") == "function_call":
+                    if not item.get("name"):
+                        errors.append("[function_call] function_call.name is empty")
+                    if "arguments" not in item:
+                        errors.append("[function_call] function_call.arguments missing")
 
         elif option_name == "text":
             # text format 配置后，输出里应有 output_text
