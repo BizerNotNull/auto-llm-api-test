@@ -336,6 +336,26 @@ class VertexBuilder(ProtocolBuilder):
 
         return errors
 
+    def extract_text_content(self, data: dict) -> str:
+        candidates = data.get("candidates", [])
+        if candidates:
+            parts = candidates[0].get("content", {}).get("parts", [])
+            for p in parts:
+                if p.get("text"):
+                    return p["text"]
+        return ""
+
+    def build_multi_turn(self, model: str, turns: list[tuple[str, str]],
+                         **kwargs) -> dict:
+        role_map = {"user": "user", "assistant": "model"}
+        contents = [
+            {"role": role_map.get(role, role), "parts": [{"text": content}]}
+            for role, content in turns
+        ]
+        body = {"contents": contents}
+        body.update(kwargs)
+        return body
+
     def extract_usage(self, data: dict) -> dict | None:
         return data.get("usageMetadata")
 

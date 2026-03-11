@@ -244,6 +244,21 @@ class ResponseBuilder(ProtocolBuilder):
 
         return errors
 
+    def extract_text_content(self, data: dict) -> str:
+        for item in data.get("output", []):
+            if item.get("type") == "message":
+                for c in item.get("content", []):
+                    if c.get("type") == "output_text":
+                        return c.get("text", "")
+        return ""
+
+    def build_multi_turn(self, model: str, turns: list[tuple[str, str]],
+                         **kwargs) -> dict:
+        input_items = [{"role": role, "content": content} for role, content in turns]
+        body = {"model": model, "input": input_items, "stream": False}
+        body.update(kwargs)
+        return body
+
     def extract_usage(self, data: dict) -> dict | None:
         return data.get("usage")
 

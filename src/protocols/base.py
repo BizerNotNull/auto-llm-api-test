@@ -54,3 +54,18 @@ class ProtocolBuilder(ABC):
         默认实现：无额外检查。子类通过 option_assertions 字典注册。
         """
         return []
+
+    @abstractmethod
+    def extract_text_content(self, data: dict) -> str:
+        """从非流式响应中提取纯文本内容"""
+        ...
+
+    @abstractmethod
+    def build_multi_turn(self, model: str, turns: list[tuple[str, str]],
+                         **kwargs) -> dict:
+        """构建多轮对话请求体
+
+        Args:
+            turns: [(role, content), ...] - role 使用标准 user/assistant
+        """
+        ...

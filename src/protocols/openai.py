@@ -284,6 +284,19 @@ class OpenAIBuilder(ProtocolBuilder):
 
         return errors
 
+    def extract_text_content(self, data: dict) -> str:
+        choices = data.get("choices", [])
+        if choices:
+            return choices[0].get("message", {}).get("content", "") or ""
+        return ""
+
+    def build_multi_turn(self, model: str, turns: list[tuple[str, str]],
+                         **kwargs) -> dict:
+        messages = [{"role": role, "content": content} for role, content in turns]
+        body = {"model": model, "messages": messages, "stream": False}
+        body.update(kwargs)
+        return body
+
     def extract_usage(self, data: dict) -> dict | None:
         return data.get("usage")
 

@@ -119,9 +119,6 @@ class AnthropicBuilder(ProtocolBuilder):
                 ],
             },
 
-            # ===== 提示词缓存 =====
-            "cache_control": {},  # 单独由 build_cache_test 处理
-
             # ===== 扩展思考 =====
             "thinking": {"thinking": {"type": "enabled", "budget_tokens": 5000}},
 
@@ -286,6 +283,24 @@ class AnthropicBuilder(ProtocolBuilder):
                     errors.append("[stop_sequences] stop_reason='stop_sequence' but stop_sequence field is null")
 
         return errors
+
+    def extract_text_content(self, data: dict) -> str:
+        for block in data.get("content", []):
+            if block.get("type") == "text":
+                return block.get("text", "")
+        return ""
+
+    def build_multi_turn(self, model: str, turns: list[tuple[str, str]],
+                         **kwargs) -> dict:
+        messages = [{"role": role, "content": content} for role, content in turns]
+        body = {
+            "model": model,
+            "max_tokens": 1024,
+            "messages": messages,
+            "stream": False,
+        }
+        body.update(kwargs)
+        return body
 
     def extract_usage(self, data: dict) -> dict | None:
         return data.get("usage")

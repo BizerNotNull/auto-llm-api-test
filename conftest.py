@@ -12,9 +12,8 @@ from src.protocols.vertex import VertexBuilder
 from src.protocols.response import ResponseBuilder
 from src.console import TestDisplay, print_summary, STATUS_COLORS, console
 
-# Ensure session timestamp is set early (before logger.py is imported)
-if not os.environ.get("LLMTEST_SESSION_TS"):
-    os.environ["LLMTEST_SESSION_TS"] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+# 时间戳统一在 pytest_configure 中设置，不在模块级提前设置
+# 避免 xdist worker 在 pytest_configure 同步之前就生成了不同的时间戳
 
 from rich.live import Live
 from rich.table import Table
@@ -240,6 +239,10 @@ def pytest_configure(config):
         if ts:
             os.environ["LLMTEST_SESSION_TS"] = ts
         return
+
+    # Controller / single-process: generate session timestamp
+    if not os.environ.get("LLMTEST_SESSION_TS"):
+        os.environ["LLMTEST_SESSION_TS"] = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 
     # Unregister default terminal reporter (registered by _pytest.terminal)
     standard_reporter = config.pluginmanager.getplugin("terminalreporter")
