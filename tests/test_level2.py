@@ -339,8 +339,8 @@ MULTI_TURN_SCENARIOS = [
     ),
     (
         "context_word",
-        "The secret word is 'banana'. Please confirm you got it.",
-        "What was the secret word I told you? Reply with just the word.",
+        "My favorite fruit is banana. Please confirm you remember it.",
+        "What is my favorite fruit? Reply with just the fruit name.",
         "banana",
     ),
 ]
