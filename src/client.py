@@ -41,7 +41,10 @@ class LLMClient:
             return f"{base}"
         elif self.protocol.name == "vertex":
             action = "streamGenerateContent" if stream else "generateContent"
-            return f"{base}/{model}:{action}"
+            url = f"{base}/{model}:{action}"
+            if stream:
+                url += "?alt=sse"
+            return url
         elif self.protocol.name == "response":
             return f"{base}"
         return base

@@ -7,11 +7,12 @@ from pathlib import Path
 from src.config import LOGS_DIR
 
 # 时间戳由 conftest.py 在 pytest_configure 阶段设置到环境变量
-# 直接运行时 (非 pytest) 仍需要 fallback
-_SESSION_TS = os.environ.get(
-    "LLMTEST_SESSION_TS",
-    datetime.datetime.now().strftime("%Y%m%d_%H%M%S"),
-)
+# 不缓存，每次从 env var 读取，确保 xdist worker 拿到 pytest_configure 同步后的值
+_FALLBACK_TS = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
+
+
+def _get_session_ts() -> str:
+    return os.environ.get("LLMTEST_SESSION_TS", _FALLBACK_TS)
 
 
 def _ensure_logs_dir():
@@ -74,7 +75,7 @@ def log_success(test_name: str, method: str, url: str, headers: dict,
     """记录成功的请求"""
     curl_str = format_curl(method, url, headers, body)
     resp_str = _format_response(status_code, response_body)
-    _write_log(f"success_{_SESSION_TS}.log", test_name, curl_str, resp_str)
+    _write_log(f"success_{_get_session_ts()}.log", test_name, curl_str, resp_str)
 
 
 def log_failure(test_name: str, method: str, url: str, headers: dict,
@@ -84,7 +85,7 @@ def log_failure(test_name: str, method: str, url: str, headers: dict,
     curl_str = format_curl(method, url, headers, body)
     resp_str = _format_response(status_code, response_body)
     extra = f"Failure reason: {reason}" if reason else ""
-    _write_log(f"failure_{_SESSION_TS}.log", test_name, curl_str, resp_str, extra)
+    _write_log(f"failure_{_get_session_ts()}.log", test_name, curl_str, resp_str, extra)
 
 
 def get_curl_and_response(method: str, url: str, headers: dict,
@@ -95,3 +96,33 @@ def get_curl_and_response(method: str, url: str, headers: dict,
         format_curl(method, url, headers, body),
         _format_response(status_code, response_body),
     )
+
+
+def log_multi_phase(test_name: str,
+                    phases: list[dict],
+                    success: bool,
+                    reason: str = ""):
+    """记录多阶段请求（如缓存测试的 create + read）到同一条日志
+
+    Args:
+        test_name: 测试名称
+        phases: 每个元素是 dict, 含 phase/method/url/headers/body/status_code/response_body
+        success: 整体是否成功
+        reason: 失败原因（仅 success=False 时使用）
+    """
+    _ensure_logs_dir()
+    filename = f"{'success' if success else 'failure'}_{_get_session_ts()}.log"
+    path = LOGS_DIR / filename
+
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(f"\n{'='*80}\n")
+        f.write(f"[{_timestamp()}] {test_name}\n")
+        if not success and reason:
+            f.write(f"Failure reason: {reason}\n")
+
+        for i, p in enumerate(phases, 1):
+            phase_label = p.get("phase", f"phase_{i}")
+            curl_str = format_curl(p["method"], p["url"], p["headers"], p["body"])
+            resp_str = _format_response(p["status_code"], p["response_body"])
+            f.write(f"\n--- [{phase_label}] Request ---\n{curl_str}\n")
+            f.write(f"\n--- [{phase_label}] Response ---\n{resp_str}\n")
