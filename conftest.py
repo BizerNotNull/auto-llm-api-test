@@ -59,6 +59,7 @@ class RichReporter:
         self._failed = 0
         self._skipped = 0
         self._unstable = 0
+        self._all_results: list[tuple[str, str]] = []  # (nodeid, status)
         self._failures: list[tuple[str, str]] = []  # (nodeid, reason)
         self._show_failure_details = True
         self._finished = False
@@ -112,17 +113,21 @@ class RichReporter:
         """Lazily create display + live on first use (after collection is done)."""
         if self._display is not None:
             return
-        self._display = TestDisplay(max(self._total, 1))
-        # Don't call progress.start() — Progress inherits from Live, so
-        # starting it would register a live display on the console and
-        # conflict with the Live object below.
-        self._live = Live(
-            self._build_live_table(),
-            console=console,
-            transient=True,
-            refresh_per_second=8,
-        )
-        self._live.start()
+        with self._lock:
+            # Double-check after acquiring lock
+            if self._display is not None:
+                return
+            self._display = TestDisplay(max(self._total, 1))
+            # Don't call progress.start() — Progress has an internal Live object,
+            # so starting it would register a second live display on the console
+            # and conflict with the Live object we manage below.
+            self._live = Live(
+                self._build_live_table(),
+                console=console,
+                transient=True,
+                refresh_per_second=8,
+            )
+            self._live.start()
 
     def pytest_runtest_logreport(self, report):
         self._ensure_display()
@@ -132,20 +137,24 @@ class RichReporter:
             with self._lock:
                 if report.passed:
                     self._passed += 1
+                    self._all_results.append((short_id, "PASS"))
                     self._display.update(short_id, "PASS")
                 elif report.failed:
                     self._failed += 1
                     # Extract one-line failure reason
                     reason = self._extract_reason(report)
                     self._failures.append((short_id, reason))
+                    self._all_results.append((short_id, "FAIL"))
                     self._display.update(short_id, "FAIL")
                 elif report.skipped:
                     skip_reason = self._get_skip_reason(report)
                     if "UNSTABLE" in skip_reason.upper():
                         self._unstable += 1
+                        self._all_results.append((short_id, "UNSTABLE"))
                         self._display.update(short_id, "UNSTABLE")
                     else:
                         self._skipped += 1
+                        self._all_results.append((short_id, "SKIP"))
                         self._display.update(short_id, "SKIP")
                 if self._live:
                     self._live.update(self._build_live_table())
@@ -156,9 +165,11 @@ class RichReporter:
                 skip_reason = self._get_skip_reason(report)
                 if "UNSTABLE" in skip_reason.upper():
                     self._unstable += 1
+                    self._all_results.append((short_id, "UNSTABLE"))
                     self._display.update(short_id, "UNSTABLE")
                 else:
                     self._skipped += 1
+                    self._all_results.append((short_id, "SKIP"))
                     self._display.update(short_id, "SKIP")
                 if self._live:
                     self._live.update(self._build_live_table())
@@ -180,14 +191,21 @@ class RichReporter:
         if self._display is None:
             return
 
-        # Print failures list
+        # Print all test results
+        if self._all_results:
+            console.print()
+            console.rule("[bold]Test Results")
+            for nodeid, status in self._all_results:
+                color = STATUS_COLORS.get(status, "white")
+                console.print(f"  [{color}]{status:>8}[/{color}]  {rich_escape(nodeid)}")
+
+        # Print failure details
         if self._failures and self._show_failure_details:
             console.print()
             console.rule("[bold red]Failures")
             for nodeid, reason in self._failures:
                 console.print(f"  [red]FAIL[/red]  {rich_escape(nodeid)}")
                 console.print(f"         [dim]{rich_escape(reason)}[/dim]")
-            console.print()
 
         # Print summary table
         print_summary(self._passed, self._failed, self._unstable, self._skipped)
@@ -279,6 +297,8 @@ BUILDERS = {
 def pytest_addoption(parser):
     parser.addoption("--protocol", action="store", default=None,
                      help="Run tests for a specific protocol only")
+    parser.addoption("--cache-rounds", action="store", type=int, default=2,
+                     help="Number of rounds for cache tests (1=create only, 2+=create+read, default: 2)")
 
 
 @pytest.fixture(scope="session")
@@ -349,6 +369,7 @@ def pytest_collection_modifyitems(config, items):
         "test_level1": cfg.test_levels.get("level1", True),
         "test_level2": cfg.test_levels.get("level2", False),
         "test_level3": cfg.test_levels.get("level3", False),
+        "test_cache": cfg.test_levels.get("cache", False),
     }
 
     for item in items:

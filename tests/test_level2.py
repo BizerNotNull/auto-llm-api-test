@@ -1,8 +1,8 @@
 """
 第二层测试 - 功能可用性测试
-- 每个非必须项是否可用
-- anthropic 提示词缓存测试
-- anthropic beta 头测试
+- 每个非必须项是否可用（非流式 + 流式）
+- anthropic beta 头测试（非流式 + 流式）
+- 多轮对话测试（非流式 + 流式）
 """
 import pytest
 import json5
@@ -14,6 +14,54 @@ from src.middleware import RequestFailed, make_retry_decorator, ai_validate
 from src.logger import log_success, log_failure, get_curl_and_response, log_multi_phase
 from src.protocols.anthropic import AnthropicBuilder
 from conftest import get_builder, get_client
+
+
+def _extract_text_from_stream_events(events: list[str], protocol_name: str) -> str:
+    """从流式事件中提取完整文本内容（用于多轮对话流式测试的关键词验证）"""
+    text_parts = []
+    for ev in events:
+        if ev == "[DONE]":
+            continue
+        try:
+            data = json5.loads(ev)
+        except Exception:
+            continue
+
+        if protocol_name == "openai":
+            choices = data.get("choices", [])
+            if choices:
+                delta = choices[0].get("delta", {})
+                if delta.get("content"):
+                    text_parts.append(delta["content"])
+        elif protocol_name == "anthropic":
+            if data.get("type") == "content_block_delta":
+                delta = data.get("delta", {})
+                if delta.get("type") == "text_delta" and delta.get("text"):
+                    text_parts.append(delta["text"])
+        elif protocol_name == "vertex":
+            for c in data.get("candidates", []):
+                for p in c.get("content", {}).get("parts", []):
+                    if p.get("text"):
+                        text_parts.append(p["text"])
+        elif protocol_name == "response":
+            if data.get("type") == "response.output_text.delta":
+                if data.get("delta"):
+                    text_parts.append(data["delta"])
+
+    return "".join(text_parts)
+
+
+def _make_stream_body(builder, protocol_name: str, body: dict) -> dict:
+    """将非流式请求体转换为流式请求体"""
+    stream_body = dict(body)
+    if protocol_name == "vertex":
+        # Vertex 通过 URL 区分流式/非流式，body 不需要 stream 字段
+        pass
+    else:
+        stream_body["stream"] = True
+    if protocol_name == "openai":
+        stream_body["stream_options"] = {"include_usage": True}
+    return stream_body
 
 
 config = load_config()
@@ -98,124 +146,57 @@ async def test_optional_field(protocol_name, model, option_name, short_prompt):
         pytest.fail(f"Optional field '{option_name}' test failed: {last}")
 
 
-# ===== Anthropic 提示词缓存测试 =====
+# ===== 可选参数流式测试 =====
 
-def _anthropic_cache_params():
-    """生成 anthropic 缓存测试参数"""
-    params = []
-    proto = config.protocols.get("anthropic")
-    if not proto or not proto.all_models:
-        return params
-    req_cfg = config.request_configs.get("anthropic", {})
-    if not req_cfg.get("cache_control", False):
-        return params
-    for model in proto.models_non_thinking:
-        params.append(("anthropic", model))
-    return params
-
-
-ANTHROPIC_CACHE_PARAMS = _anthropic_cache_params()
-
-
-@pytest.mark.parametrize("protocol_name,model", ANTHROPIC_CACHE_PARAMS,
-                         ids=[f"anthropic-cache-{m}" for _, m in ANTHROPIC_CACHE_PARAMS])
+@pytest.mark.parametrize("protocol_name,model,option_name", OPTIONAL_PARAMS,
+                         ids=[_opt_id(p) + "-stream" for p in OPTIONAL_PARAMS])
 @pytest.mark.asyncio
-async def test_anthropic_prompt_caching(protocol_name, model, long_prompt):
-    """Anthropic 提示词缓存测试 - 发送两次相同请求验证缓存创建与命中
-
-    测试逻辑:
-    1. 第一次请求: 带 cache_control 的 system prompt → 期望 cache_creation_input_tokens > 0
-    2. 第二次请求: 相同内容 → 期望 cache_read_input_tokens > 0
-    使用固定 session_id 保证两次请求的缓存内容一致，
-    同时每次测试运行生成新 session_id 避免与之前运行冲突。
-    """
-    import uuid as _uuid
-    builder = AnthropicBuilder()
-    client = get_client(config, "anthropic")
-    session_id = _uuid.uuid4().hex[:12]
-    test_name = f"L2_cache_anthropic_{model}"
+async def test_optional_field_stream(protocol_name, model, option_name, short_prompt):
+    """测试每个非必须配置项在流式模式下是否可用"""
+    builder = get_builder(protocol_name)
+    client = get_client(config, protocol_name)
+    body = builder.build_with_option(model, short_prompt, option_name)
+    body = _make_stream_body(builder, protocol_name, body)
+    test_name = f"L2_optional_stream_{protocol_name}_{model}_{option_name}"
 
     retry_decorator = make_retry_decorator(config.retry)
 
-    # 收集两阶段的请求/响应信息，用于最终一起写日志
-    phase_records: list[dict] = []
+    @retry_decorator
+    async def _do_request():
+        status, events, full_text = await client.request_stream(
+            body, model=model)
+        method, url, headers = client.get_request_info(
+            body, model=model, stream=True)
 
-    async def _single_request(body, phase: str):
-        """发送单次请求并返回 data，缓存断言在内部完成（可 retry）"""
-        @retry_decorator
-        async def _do():
-            status, text, data = await client.request(body, model=model)
-            method, url, headers = client.get_request_info(body, model=model)
+        if status != 200:
+            log_failure(test_name, method, url, headers, body, status, full_text,
+                        reason=f"HTTP {status}")
+            raise RequestFailed(status, full_text, f"HTTP {status}")
 
-            # 记录本次请求信息
-            record = dict(phase=phase, method=method, url=url,
-                          headers=headers, body=body,
-                          status_code=status, response_body=text)
-            phase_records.append(record)
+        errors = builder.assert_stream_events(events)
 
-            if status != 200:
-                raise RequestFailed(status, text, f"HTTP {status}")
+        if errors:
+            log_failure(test_name, method, url, headers, body, status, full_text,
+                        reason="; ".join(errors))
+            raise RequestFailed(status, full_text, "; ".join(errors))
 
-            errors = builder.assert_non_stream_response(data)
-
-            # ---- 缓存专属断言 ----
-            usage = builder.extract_usage(data) or {}
-            if phase == "create":
-                has_creation = "cache_creation_input_tokens" in usage
-                has_read = "cache_read_input_tokens" in usage
-                if not has_creation and not has_read:
-                    errors.append(
-                        "usage 中缺少缓存字段 "
-                        "(cache_creation_input_tokens 和 cache_read_input_tokens 均不存在), "
-                        f"可能提示词 token 数不足最低缓存要求. usage={usage}")
-                elif usage.get("cache_creation_input_tokens", 0) == 0 \
-                        and usage.get("cache_read_input_tokens", 0) == 0:
-                    errors.append(
-                        "缓存未创建 "
-                        f"(cache_creation_input_tokens=0, cache_read_input_tokens=0). "
-                        f"usage={usage}")
-            elif phase == "read":
-                if "cache_read_input_tokens" not in usage:
-                    errors.append(
-                        f"usage 中缺少 cache_read_input_tokens 字段. usage={usage}")
-                elif usage.get("cache_read_input_tokens", 0) == 0:
-                    errors.append(
-                        f"cache_read_input_tokens=0, 缓存未命中. usage={usage}")
-
-            if errors:
-                raise RequestFailed(status, text, "; ".join(errors))
-
-            return data
-
-        return await _do()
-
-    body = builder.build_cache_test(model, long_prompt, session_id=session_id)
+        log_success(test_name, method, url, headers, body, status, full_text)
+        return events
 
     try:
-        # ---- 第 1 次请求: 创建缓存 ----
-        await _single_request(body, "create")
-        # ---- 第 2 次请求: 命中缓存 ----
-        await _single_request(body, "read")
-
-        # 两阶段都成功，一起写到 success 日志
-        log_multi_phase(test_name, phase_records, success=True)
-
-    except (RetryError, RequestFailed) as e:
-        last = e.last_attempt.exception() if isinstance(e, RetryError) else e
-        reason = str(last)
-
-        # 失败时也把已收集的所有阶段一起写到 failure 日志
-        log_multi_phase(test_name, phase_records, success=False, reason=reason)
-
+        await _do_request()
+    except RetryError as e:
+        last = e.last_attempt.exception()
         if config.ai_validation.enabled and isinstance(last, RequestFailed):
-            method, url, headers = client.get_request_info(body, model=model)
+            method, url, headers = client.get_request_info(
+                body, model=model, stream=True)
             curl_str, resp_str = get_curl_and_response(
                 method, url, headers, body, last.status_code, last.body)
-            expected, ai_reason = await ai_validate(
+            expected, reason = await ai_validate(
                 config.ai_validation, curl_str, resp_str)
             if expected:
-                pytest.skip(f"UNSTABLE: AI says expected - {ai_reason}")
-        pytest.fail(f"Anthropic cache test failed: {last}")
+                pytest.skip(f"UNSTABLE: AI says expected - {reason}")
+        pytest.fail(f"Optional field '{option_name}' stream test failed: {last}")
 
 
 # ===== Anthropic Beta 头测试 =====
@@ -293,6 +274,58 @@ async def test_anthropic_beta_headers(protocol_name, model, beta_header, short_p
             if expected:
                 pytest.skip(f"UNSTABLE: AI says expected - {reason}")
         pytest.fail(f"Beta header '{beta_header}' test failed: {last}")
+
+
+# ===== Anthropic Beta 头流式测试 =====
+
+@pytest.mark.parametrize("protocol_name,model,beta_header", ANTHROPIC_BETA_PARAMS,
+                         ids=[f"anthropic-beta-stream-{b}" for _, _, b in ANTHROPIC_BETA_PARAMS])
+@pytest.mark.asyncio
+async def test_anthropic_beta_headers_stream(protocol_name, model, beta_header, short_prompt):
+    """测试 Anthropic beta 头在流式模式下是否可用"""
+    builder = AnthropicBuilder()
+    client = get_client(config, "anthropic")
+    body = builder.build_stream(model, short_prompt)
+    extra_headers = {"anthropic-beta": beta_header}
+    test_name = f"L2_beta_stream_anthropic_{model}_{beta_header}"
+
+    retry_decorator = make_retry_decorator(config.retry)
+
+    @retry_decorator
+    async def _do_request():
+        status, events, full_text = await client.request_stream(
+            body, model=model, extra_headers=extra_headers)
+        method, url, headers = client.get_request_info(
+            body, model=model, stream=True, extra_headers=extra_headers)
+
+        if status != 200:
+            log_failure(test_name, method, url, headers, body, status, full_text,
+                        reason=f"HTTP {status}")
+            raise RequestFailed(status, full_text, f"HTTP {status}")
+
+        errors = builder.assert_stream_events(events)
+        if errors:
+            log_failure(test_name, method, url, headers, body, status, full_text,
+                        reason="; ".join(errors))
+            raise RequestFailed(status, full_text, "; ".join(errors))
+
+        log_success(test_name, method, url, headers, body, status, full_text)
+        return events
+
+    try:
+        await _do_request()
+    except RetryError as e:
+        last = e.last_attempt.exception()
+        if config.ai_validation.enabled and isinstance(last, RequestFailed):
+            method, url, headers = client.get_request_info(
+                body, model=model, stream=True, extra_headers=extra_headers)
+            curl_str, resp_str = get_curl_and_response(
+                method, url, headers, body, last.status_code, last.body)
+            expected, reason = await ai_validate(
+                config.ai_validation, curl_str, resp_str)
+            if expected:
+                pytest.skip(f"UNSTABLE: AI says expected - {reason}")
+        pytest.fail(f"Beta header '{beta_header}' stream test failed: {last}")
 
 
 # ===== 多轮对话测试 =====
@@ -422,3 +455,130 @@ async def test_multi_turn_conversation(
             if expected:
                 pytest.skip(f"UNSTABLE: AI says expected - {ai_reason}")
         pytest.fail(f"Multi-turn conversation test failed: {last}")
+
+
+# ===== 多轮对话流式测试 =====
+
+@pytest.mark.parametrize(
+    "protocol_name,model,scenario_id,first_msg,followup_msg,expected_keyword",
+    MULTI_TURN_PARAMS,
+    ids=[f"{n}-{m}-{s}-stream" for n, m, s, *_ in MULTI_TURN_PARAMS],
+)
+@pytest.mark.asyncio
+async def test_multi_turn_conversation_stream(
+    protocol_name, model, scenario_id, first_msg, followup_msg, expected_keyword,
+):
+    """多轮对话流式测试 - 第一轮非流式获取上下文，第二轮流式验证
+
+    测试逻辑:
+    1. 第一次请求 (非流式): 发送包含特定信息的消息 → 获取助手回复
+    2. 第二次请求 (流式): 携带完整对话历史 + 后续问题 → 验证流式回复包含该信息
+    """
+    builder = get_builder(protocol_name)
+    client = get_client(config, protocol_name)
+    test_name = f"L2_multi_turn_stream_{protocol_name}_{model}_{scenario_id}"
+
+    retry_decorator = make_retry_decorator(config.retry)
+    phase_records: list[dict] = []
+    last_body = None
+
+    async def _non_stream_request(body, phase: str):
+        """第一轮: 非流式请求获取助手回复"""
+        nonlocal last_body
+        last_body = body
+
+        @retry_decorator
+        async def _do():
+            status, text, data = await client.request(body, model=model)
+            method, url, headers = client.get_request_info(body, model=model)
+
+            record = dict(phase=phase, method=method, url=url,
+                          headers=headers, body=body,
+                          status_code=status, response_body=text)
+            phase_records.append(record)
+
+            if status != 200:
+                raise RequestFailed(status, text, f"HTTP {status}")
+
+            errors = builder.assert_non_stream_response(data)
+            if errors:
+                raise RequestFailed(status, text, "; ".join(errors))
+
+            return data
+
+        return await _do()
+
+    async def _stream_request(body, phase: str):
+        """第二轮: 流式请求验证上下文"""
+        nonlocal last_body
+        last_body = body
+
+        @retry_decorator
+        async def _do():
+            status, events, full_text = await client.request_stream(
+                body, model=model)
+            method, url, headers = client.get_request_info(
+                body, model=model, stream=True)
+
+            record = dict(phase=phase, method=method, url=url,
+                          headers=headers, body=body,
+                          status_code=status, response_body=full_text)
+            phase_records.append(record)
+
+            if status != 200:
+                raise RequestFailed(status, full_text, f"HTTP {status}")
+
+            errors = builder.assert_stream_events(events)
+
+            # 从流式事件中提取文本并验证关键词
+            response_text = _extract_text_from_stream_events(
+                events, protocol_name).lower()
+            if expected_keyword not in response_text:
+                errors.append(
+                    f"多轮对话上下文丢失 (流式): 回复中未包含 '{expected_keyword}'. "
+                    f"response={response_text[:200]}")
+
+            if errors:
+                raise RequestFailed(status, full_text, "; ".join(errors))
+
+            return events
+
+        return await _do()
+
+    try:
+        # ---- 第 1 轮: 告知信息 (非流式) ----
+        body_1 = builder.build_non_stream(model, first_msg)
+        data_1 = await _non_stream_request(body_1, "turn_1")
+
+        assistant_text = builder.extract_text_content(data_1)
+        if not assistant_text:
+            raise RequestFailed(200, "", "无法从第一轮响应中提取文本内容")
+
+        # ---- 第 2 轮: 携带历史上下文询问 (流式) ----
+        turns = [
+            ("user", first_msg),
+            ("assistant", assistant_text),
+            ("user", followup_msg),
+        ]
+        body_2 = builder.build_multi_turn(model, turns)
+        body_2 = _make_stream_body(builder, protocol_name, body_2)
+        await _stream_request(body_2, "turn_2_stream")
+
+        log_multi_phase(test_name, phase_records, success=True)
+
+    except (RetryError, RequestFailed) as e:
+        last = e.last_attempt.exception() if isinstance(e, RetryError) else e
+        reason = str(last)
+        log_multi_phase(test_name, phase_records, success=False, reason=reason)
+
+        if config.ai_validation.enabled and isinstance(last, RequestFailed):
+            method, url, headers = client.get_request_info(
+                last_body or body_1, model=model, stream=True)
+            curl_str, resp_str = get_curl_and_response(
+                method, url, headers, last_body or body_1,
+                last.status_code, last.body)
+            expected, ai_reason = await ai_validate(
+                config.ai_validation, curl_str, resp_str)
+            if expected:
+                pytest.skip(f"UNSTABLE: AI says expected - {ai_reason}")
+        pytest.fail(f"Multi-turn conversation stream test failed: {last}")

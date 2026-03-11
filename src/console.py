@@ -16,7 +16,7 @@ if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
     except Exception:
         pass
 
-console = Console()
+console = Console(stderr=True, force_terminal=True)
 
 # 测试状态颜色
 STATUS_COLORS = {
