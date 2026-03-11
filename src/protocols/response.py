@@ -162,6 +162,7 @@ class ResponseBuilder(ProtocolBuilder):
 
         event_types = set()
         has_text = False
+        has_function_call = False
         for ev in events:
             if ev == "[DONE]":
                 continue
@@ -172,6 +173,8 @@ class ResponseBuilder(ProtocolBuilder):
                 if etype == "response.output_text.delta":
                     if data.get("delta"):
                         has_text = True
+                elif etype == "response.function_call_arguments.delta":
+                    has_function_call = True
             except Exception:
                 pass
 
@@ -179,8 +182,8 @@ class ResponseBuilder(ProtocolBuilder):
             errors.append("Missing 'response.created' event")
         if "response.completed" not in event_types:
             errors.append("Missing 'response.completed' event")
-        if not has_text:
-            errors.append("No text delta in stream events")
+        if not has_text and not has_function_call:
+            errors.append("No text delta or function_call in stream events")
         return errors
 
     def assert_option_response(self, option_name: str, data: dict) -> list[str]:
